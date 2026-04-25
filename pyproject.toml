@@ -1,10 +1,11 @@
 [project]
 name = "githooker"
-version = "1.0.0"
+version = "1.1.0"
 description = "Write pretty and concise Git hooks in Python."
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [{"name"="Kamil Cyganowski", email="kamil.cyganowski@gmail.com"}]
+license = "MIT"
 dependencies = []
 
 [build-system]
