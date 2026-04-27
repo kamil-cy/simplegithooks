@@ -7,38 +7,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-blink = ""
-fg_black = ""
-fg_red = ""
-fg_green = ""
-fg_yellow = ""
-fg_blue = ""
-fg_magenta = ""
-fg_cyan = ""
-fg_white = ""
-fg_reset = ""
-bg_red = ""
-bg_yellow = ""
-bg_green = ""
-reset = ""
-
-with contextlib.suppress(Exception):
-    from colorama import Back, Fore, Style
-
-    blink = "\033[5m"
-    fg_black = Fore.BLACK
-    fg_red = Fore.RED
-    fg_green = Fore.GREEN
-    fg_yellow = Fore.YELLOW
-    fg_blue = Fore.BLUE
-    fg_magenta = Fore.MAGENTA
-    fg_cyan = Fore.CYAN
-    fg_white = Fore.WHITE
-    bg_red = Back.RED
-    bg_yellow = Back.YELLOW
-    bg_green = Back.GREEN
-    reset = Style.RESET_ALL
-
+from .colors import (
+    bg_green,
+    bg_red,
+    bg_yellow,
+    blink,
+    fg_cyan,
+    fg_green,
+    fg_magenta,
+    fg_red,
+    fg_white,
+    fg_yellow,
+    reset,
+)
 
 CALLBACKS: dict[str, Callable[[], Any]] = {
     "locker": lambda: f"{blink} 🔒{reset}",
@@ -66,7 +47,7 @@ class Result:
 
 
 class PreCommit:
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         pre_commit_file_path: str,
         ignore_files: list[Path | str] | None = None,
@@ -89,11 +70,65 @@ class PreCommit:
         self.prevent: bool = False
         self.init_event(pre_commit_file_path)
 
-    def init_event(self, pre_commit_file__path: str) -> None:
-        if pre_commit_file__path.endswith(".git/hooks/pre-commit"):
-            self.on_call_as_git_hook()
+    @staticmethod
+    def get_pre_commit_path_absolute() -> Path:
+        git_cmd = ["git", "rev-parse", "--git-path", "hooks/pre-commit"]
+        pre_commit_path_relative = subprocess.check_output(git_cmd).decode().strip()  # noqa: S603
+        return Path().cwd() / pre_commit_path_relative
+
+    @classmethod
+    def install_git_hook(cls, path_from: Path | str) -> None:
+        pre_commit_path_absolute = PreCommit.get_pre_commit_path_absolute()
+        if pre_commit_path_absolute.exists() or pre_commit_path_absolute.is_symlink():
+            cls.create_symbolic_link(
+                path_from,
+                str(pre_commit_path_absolute),
+                force=True,
+            )
         else:
-            self.on_call_as_script()
+            cls.create_symbolic_link(path_from, str(pre_commit_path_absolute))
+        cls.lockdown = True
+
+    @classmethod
+    def create_symbolic_link(
+        cls,
+        path_from: Path | str,
+        path_to: str,
+        force: bool = False,  # noqa: FBT001, FBT002
+    ):
+        _path_from = Path(path_from)
+        _f = "-f" if force else ""
+        create_symbolic_link_cmd = ["ln", _f, "-s", str(_path_from), str(path_to)]
+        warning = f"WARNING: file '{path_to}' already exists and will be overwritten.\n"
+        msg = (
+            "To use this Git hook you must either create a symbolic link for"
+            " this file or copy it's content to the Git pre-commit hook file.\n"
+            f"{fg_yellow}{warning if force else ''}{reset}"
+            "Do you want to execute the following command to create the symbolic link?\n"
+            f"  {fg_magenta}{' '.join(create_symbolic_link_cmd)}{reset}\n"
+            f"Please type '{fg_cyan}CREATE_SYMBOLIC_LINK{reset}' to execute this command (mind underscores): "
+        )
+        sys.stderr.write(msg)
+        try:
+            ans = input()
+        except KeyboardInterrupt:
+            sys.stderr.write(f"{fg_yellow}Detected ^C, exiting...{reset}")
+            return
+        if ans.strip() == "CREATE_SYMBOLIC_LINK":
+            try:
+                subprocess.check_output(create_symbolic_link_cmd).decode().strip()  # noqa: S603
+                _path_from.chmod(_path_from.stat().st_mode | 64)
+            except:  # noqa: E722
+                msg = f"{fg_red}Failure, couldn't create the symbolic link.{reset}\n"
+                sys.stderr.write(msg)
+            else:
+                msg = f"{fg_green}Success, the symbolic link was created.{reset}\n"
+                sys.stderr.write(msg)
+
+    @classmethod
+    def run_default_git_hook(cls) -> None:
+        pre_commit_path_absolute = PreCommit.get_pre_commit_path_absolute()
+        subprocess.run(pre_commit_path_absolute, check=False)  # noqa: S603
 
     def __getattribute__(self, name: str):
         attr = object.__getattribute__(self, name)
@@ -107,58 +142,33 @@ class PreCommit:
             return wrapper
         return attr
 
+    def init_event(self, pre_commit_file__path: str) -> None:
+        if pre_commit_file__path.endswith(".git/hooks/pre-commit"):
+            self.on_call_as_git_hook()
+        else:
+            self.on_call_as_script()
+
     def on_call_as_git_hook(self) -> None:
         pass
 
     def on_call_as_script(self) -> None:
-        git_cmd = "git rev-parse --git-path hooks/pre-commit"
-        pre_commit_path_relative = subprocess.check_output(git_cmd, shell=True).decode().strip()
-        pre_commit_path_absolute = Path().cwd() / pre_commit_path_relative
-        if pre_commit_path_absolute.exists() or pre_commit_path_absolute.is_symlink():
-            self.create_symbolic_link(pre_commit_path_absolute, force=True)
-        else:
-            self.create_symbolic_link(pre_commit_path_absolute)
-        self.lockdown = True
+        pass
 
-    def create_symbolic_link(self, path: Path, force: bool = False):
-        _f = " -f" if force else ""
-        create_symbolic_link_cmd = f"ln{_f} -s {self.pre_commit_file_path} {path}"
-        file_exists_warning = f"WARNING: file '{path}' already exists and will be overwritten.\n"
-        msg = (
-            "To use this Git hook you must either create a symbolic link for"
-            " this file or copy it's content to the Git pre-commit hook file.\n"
-            f"{fg_yellow}{file_exists_warning if force else ''}{reset}"
-            "Do you want to execute the following command to create the symbolic link?\n"
-            f"  {fg_magenta}{create_symbolic_link_cmd}{reset}\n"
-            f"Please type '{fg_cyan}CREATE_SYMBOLIC_LINK{reset}' to execute this command (mind underscores): "
-        )
-        sys.stderr.write(msg)
-        try:
-            ans = input()
-        except KeyboardInterrupt:
-            sys.stderr.write(f"{fg_yellow}Detected ^C, exiting...{reset}")
-            return
-        if ans.strip() == "CREATE_SYMBOLIC_LINK":
-            try:
-                subprocess.check_output(create_symbolic_link_cmd, shell=True).decode().strip()
-                self.pre_commit_file_path.chmod(self.pre_commit_file_path.stat().st_mode | 64)
-            except Exception:
-                sys.stderr.write(f"{fg_red}Failure, couldn't create the symbolic link.{reset}\n")
-            else:
-                sys.stderr.write(f"{fg_green}Success, the symbolic link was created.{reset}\n")
-
-    def get_files_with_lines(self, files: list[str] | None = None) -> dict[str, list[str]]:
+    def get_files_with_lines(
+        self,
+        files: list[str] | None = None,
+    ) -> dict[str, list[str]]:
         if files is None:
             files = self.files_from_git
         files_with_lines: dict[str, list[str]] = {}
         for filename in files:
-            with contextlib.suppress(Exception), open(filename) as f:
+            with contextlib.suppress(Exception), Path(filename).open() as f:
                 files_with_lines[filename] = f.readlines()
         return files_with_lines
 
     def get_staged_files_from_git(self) -> list[str]:
         command = ["git", "diff", "--cached", "--name-only", "--diff-filter=AM"]
-        return subprocess.check_output(command).decode().split()
+        return subprocess.check_output(command).decode().split()  # noqa: S603
 
     def add_ignored_file(self, path: Path | str | None = None) -> None:
         if path is None:
@@ -176,38 +186,44 @@ class PreCommit:
         icon: str,
         category: str,
         icon_space: int = 1,
-        prevent: bool = True,
+        prevent: bool = True,  # noqa: FBT001, FBT002
     ) -> int:
         count = 0
         for filename, lines in self.files.items():
             if filename in self.ignore_files or any(
-                [Path(filename).match(p) for p in self.ignore_files]
+                Path(filename).match(str(p)) for p in self.ignore_files
             ):
                 continue
-            for num, line in enumerate(lines):
+            for n, line in enumerate(lines, start=1):
                 _prevent = False
                 if substring in line:
                     count += 1
                     if prevent:
                         self.prevent = True
                         _prevent = True
-                        msg = f"{fg_red}'{substring}' found in {filename}:{num + 1}{reset}"
+                        msg = f"{fg_red}'{substring}' found in {filename}:{n}{reset}"
                         msg = f"{msg}{self.callback_locker()}"
                     else:
-                        msg = f"{fg_yellow}'{substring}' found in {filename}:{num + 1}{reset}"
+                        msg = f"{fg_yellow}'{substring}' found in {filename}:{n}{reset}"
                     result = Result(icon, icon_space, category, msg, _prevent)
                     if self._counters.get(category):
                         self._counters[category].count += 1
                     else:
-                        self._counters[category] = Counter(icon, icon_space, 1, _prevent)
+                        self._counters[category] = Counter(
+                            icon,
+                            icon_space,
+                            1,
+                            _prevent,
+                        )
                     self._results.append(result)
         return count
 
     def check_command(
         self,
         command: str,
-        prevent: bool = True,
-        rc_zero_succes: bool = True,
+        prevent: bool = True,  # noqa: FBT001, FBT002
+        rc_zero_succes: bool = True,  # noqa: FBT001, FBT002
+        icon: str = "❯",  # noqa: RUF001
     ) -> int:
         _prevent = False
         buffer: str = ""
@@ -221,14 +237,15 @@ class PreCommit:
                 buffer = f"{buffer}{self.callback_locker()}"
             rc = 255
         else:
-            result = subprocess.run(
+            execution = subprocess.run(  # noqa: PLW1510, S602
                 command,
                 shell=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                cwd=Path(),
             )
             non_zero = ", RC!=0 SUCCESS" if not rc_zero_succes else ""
-            rc = result.returncode
+            rc = execution.returncode
             success = rc == 0 if rc_zero_succes else rc != 0
             if success:
                 buffer = f"{fg_green}{buffer} (OK{non_zero}){reset}"
@@ -238,8 +255,8 @@ class PreCommit:
                     self.prevent = True
                     _prevent = True
                     buffer = f"{buffer}{self.callback_locker()}"
-        result = Result("❯", 1, cmd, buffer, _prevent)
-        self._counters[cmd] = Counter("❯", 1, 0, _prevent)
+        result = Result(icon, 1, cmd, buffer, _prevent)
+        self._counters[cmd] = Counter(icon, 1, 0, _prevent)
         self._results.append(result)
         return rc
 
@@ -247,7 +264,7 @@ class PreCommit:
         self,
         category: str | None = None,
         indent: int = 2,
-        preventing_only: bool = False,
+        preventing_only: bool = False,  # noqa: FBT001, FBT002
     ) -> str:
         result: str = "Results:\n"
         if category is None:
@@ -261,7 +278,7 @@ class PreCommit:
         self,
         category: str | None = None,
         indent: int = 2,
-        preventing_only: bool = False,
+        preventing_only: bool = False,  # noqa: FBT001, FBT002
     ) -> str:
         result: str = ""
         for r in self._results:
