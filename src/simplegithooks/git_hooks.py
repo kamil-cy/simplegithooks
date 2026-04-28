@@ -77,7 +77,7 @@ class PrePushConfig:
             "git",
             "diff",
             "--name-only",
-            "@{u}..HEAD",
+            "origin/HEAD..HEAD",
         ],
     )
     callbacks: dict[str, Callable[[], Any]] = field(
