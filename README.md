@@ -1,14 +1,16 @@
-<div style="color: #701050; border: 3px solid #fff399; background-color: #ffcc00; padding: 20px; border-radius: 10px;">
+> [!IMPORTANT]
+> This project has been renamed from `SimpleGitHooks` to `GitHooks` and moved to a new repository https://github.com/kamil-cy/githooks
+>
+> Please visit the new home of this library here: ➡️ https://pypi.org/project/githooks
+>
+> The old `simplegithooks` package is no longer maintained.
 
+<!-- <div style="color: #701050; border: 3px solid #fff399; background-color: #ffcc00; padding: 20px; border-radius: 10px;">
   <h1>Project moved</h1>
-
   <p>This project has been renamed from <code>SimpleGitHooks</code> to <code>GitHooks</code> and moved to a new repository <a href="https://github.com/kamil-cy/githooks">https://github.com/kamil-cy/githooks</a></p>
-
   <p>Please visit the new home of this library here: ➡️ <a href="https://pypi.org/project/githooks/">https://pypi.org/project/githooks/</a></p>
-
   <p>The old <code>simplegithooks</code> package is no longer maintained.</p>
-
-</div>
+</div> -->
 
 # SimpleGitHooks
 
